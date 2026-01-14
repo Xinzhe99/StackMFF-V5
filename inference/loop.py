@@ -20,7 +20,7 @@ from ..utils.common import (
     instantiate_from_config,
     VRAMPeakMonitor,
 )
-from pipeline import StackMFFV5Pipeline
+from .pipeline import StackMFFV5Pipeline
 from model import ControlLDM, Diffusion
 
 

@@ -1,0 +1,11 @@
+# User specified directories
+.kiro/
+.vscode/
+dustbin/
+exp/
+Visualization/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
