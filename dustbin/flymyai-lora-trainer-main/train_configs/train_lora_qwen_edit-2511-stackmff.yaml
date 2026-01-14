@@ -1,0 +1,37 @@
+pretrained_model_name_or_path: /home/ot/.cache/huggingface/hub/models--Qwen--Qwen-Image-Edit-2511/snapshots/6f3ccc0b56e431dc6a0c2b2039706d7d26f22cb9
+data_config:
+  train_batch_size: 1
+  num_workers: 4
+  img_size: 256
+  caption_dropout_rate: 0.1
+  img_dir: /home/ot/Students/xxz/datasets/DIODE-5/TR/AiF
+  control_dir: /home/ot/Students/xxz/datasets/DIODE-5/TR/focus_stack
+  random_ratio: false # support multi crop preprocessing
+  caption_type: txt
+report_to: null
+train_batch_size: 1
+output_dir: ./test_lora_saves_edit
+max_train_steps: 3000
+learning_rate: 2e-4
+lr_scheduler: constant
+lr_warmup_steps: 10
+adam_beta1: 0.9
+adam_beta2: 0.999
+adam_weight_decay: 0.01
+adam_epsilon: 1e-8
+max_grad_norm: 1.0
+logging_dir: logs
+mixed_precision: "bf16"
+checkpointing_steps: 250
+checkpoints_total_limit: 10
+tracker_project_name: lora_test
+resume_from_checkpoint: latest
+gradient_accumulation_steps: 1
+rank: 16
+precompute_text_embeddings: true
+precompute_image_embeddings: true
+quantize: true
+adam8bit: true
+save_cache_on_disk: true
+fusion_model_path: /home/ot/Students/xxz/projects_mff/StackMFFV5/train_runs/train_runs9/model_save/epoch_5.pth
+

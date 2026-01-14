@@ -1,0 +1,54 @@
+ckpt/
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info
+# Virtual environment
+env/
+venv/
+.venv/
+
+# Environment variables
+.env
+
+# VSCode settings
+.vscode/
+
+# Mac & Linux
+.DS_Store
+*.swp
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# Log files
+*.log
+
+# Pytest cache
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+
+# Coverage reports
+htmlcov/
+coverage.xml
+*.cover
+
+# Others
+*.sqlite3
+debug.ipynb
+2024-11-01 03.33.51.jpg
+
+*.pth
+*.safetensors
+flymy_wan2/ckpts/
+ckpts/
+*.mp4
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+!assets/*
