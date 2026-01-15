@@ -56,14 +56,16 @@ class StackInferenceLoop:
         if hasattr(self.train_cfg.train, 'sd_path'):
             sd_path = self.train_cfg.train.sd_path
             print(f"Loading SD weights from {sd_path}")
-            sd_weight = torch.load(sd_path, map_location="cpu")
+            # weights_only=False for PyTorch 2.6+ compatibility with Lightning checkpoints
+            sd_weight = torch.load(sd_path, map_location="cpu", weights_only=False)
             if "state_dict" in sd_weight:
                 sd_weight = sd_weight["state_dict"]
             unused, missing = self.cldm.load_pretrained_sd(sd_weight)
         
         # Load ControlNet weights
         print(f"Loading ControlNet weights from {self.args.ckpt}")
-        control_weight = torch.load(self.args.ckpt, map_location="cpu")
+        # weights_only=False for PyTorch 2.6+ compatibility with Lightning checkpoints
+        control_weight = torch.load(self.args.ckpt, map_location="cpu", weights_only=False)
         self.cldm.load_controlnet_from_ckpt(control_weight)
         
         self.cldm.to(self.device).eval()
