@@ -6,7 +6,8 @@ from PIL import Image
 from tqdm import tqdm
 import math
 import sys
-from model.network import DepthTransformer
+
+from network import DepthTransformer
 
 from optimum.quanto import quantize, qfloat8, freeze, qint8
 from diffusers import (
@@ -57,8 +58,8 @@ def load_stack_images(stack_dir, width, height, processor):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--stack_dir", type=str, default="/home/ot/Students/xxz/datasets/test_datasets/Mobile Depth/image stack/keyboard", help="Path to the folder containing stack images")
-    parser.add_argument("--prompt", type=str, default="high quality, sharp focus, detailed, 把键盘改成红色的", help="Text prompt")
-    parser.add_argument("--fusion_model_path", type=str, default='weights/stackmffv5.pth', help="Path to trained DepthTransformer checkpoint (e.g. .pth)")
+    parser.add_argument("--prompt", type=str, default="High quality, sharp, crisp, clear, well-focused, high-resolution, detailed, noise-free, smooth, natural textures, realistic textures, rich textures", help="Text prompt")
+    parser.add_argument("--fusion_model_path", type=str, default='/home/ot/Students/xxz/projects_mff/StackMFFV5/train_runs/train_runs9/model_save/epoch_5.pth', help="Path to trained DepthTransformer checkpoint (e.g. .pth)")
     parser.add_argument("--model_path", type=str, default="/home/ot/.cache/huggingface/hub/models--Qwen--Qwen-Image-Edit-2509/snapshots/d3968ef930e841f4c73640fb8afa3b306a78167e", help="Pretrained Qwen-Image-Edit path")
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--dtype", type=str, default="bf16", choices=["bf16", "fp16", "fp32"])
@@ -198,111 +199,139 @@ def main():
     # Determine latent channels (z_dim)
     # User identified latent dimension is 16. Use config if available, else default to 16.
     num_channels_latents = getattr(vae.config, "z_dim", 16)
+    
+    print("Models loaded successfully.")
+    print("Interactive mode: Input a prompt and press Enter to generate an image.")
+    print("Press Ctrl+C or Ctrl+D (Unix) or Ctrl+Z (Windows) to exit.")
+    
+    gen_count = 0 
+    
+    while True:
+        try:
+            print(f"\n--- Generation {gen_count} ---")
+            user_input = input(f"Enter prompt: ")
+            current_prompt = user_input.strip()
+            
+            print(f"Using prompt: '{current_prompt}'")
 
-    latents = torch.randn(
-        (bsz, num_channels_latents, 1, latent_h, latent_w),
-        device=device,
-        dtype=dtype
-    )
-    
-    # 6. Encode Prompt
-    print(f"Encoding prompt: '{args.prompt}'")
-    prompt_embeds, prompt_masks = pipeline.encode_prompt(
-        prompt=args.prompt,
-        image=stack_imgs_pil[0], # Just use first image for sizing
-        device=device,
-        num_images_per_prompt=1
-    )
-    
-    # 7. Sampling Loop
-    # Calculate mu for dynamic shifting if enabled (common in FlowMatch schedulers like Flux/Qwen)
-    mu = None
-    if getattr(scheduler.config, "use_dynamic_shifting", False):
-        seq_len = latent_h * latent_w
-        # Default defaults for Flux-like schedules, try to read from config if available
-        base_seq_len = getattr(scheduler.config, "base_image_seq_len", 256)
-        max_seq_len = getattr(scheduler.config, "max_image_seq_len", 4096)
-        base_shift = getattr(scheduler.config, "base_shift", 0.5)
-        max_shift = getattr(scheduler.config, "max_shift", 1.15)
-        
-        mu = (seq_len - base_seq_len) / (max_seq_len - base_seq_len) * (max_shift - base_shift) + base_shift
-        # print(f"Dynamic shifting enabled. Calculated mu: {mu} for seq_len: {seq_len}")
+            latents = torch.randn(
+                (bsz, num_channels_latents, 1, latent_h, latent_w),
+                device=device,
+                dtype=dtype
+            )
+            
+            # 6. Encode Prompt
+            prompt_embeds, prompt_masks = pipeline.encode_prompt(
+                prompt=current_prompt,
+                image=stack_imgs_pil[0], # Just use first image for sizing
+                device=device,
+                num_images_per_prompt=1
+            )
+            
+            # 7. Sampling Loop
+            # Calculate mu for dynamic shifting if enabled (common in FlowMatch schedulers like Flux/Qwen)
+            mu = None
+            if getattr(scheduler.config, "use_dynamic_shifting", False):
+                seq_len = latent_h * latent_w
+                # Default defaults for Flux-like schedules, try to read from config if available
+                base_seq_len = getattr(scheduler.config, "base_image_seq_len", 256)
+                max_seq_len = getattr(scheduler.config, "max_image_seq_len", 4096)
+                base_shift = getattr(scheduler.config, "base_shift", 0.5)
+                max_shift = getattr(scheduler.config, "max_shift", 1.15)
+                
+                mu = (seq_len - base_seq_len) / (max_seq_len - base_seq_len) * (max_shift - base_shift) + base_shift
+                # print(f"Dynamic shifting enabled. Calculated mu: {mu} for seq_len: {seq_len}")
 
-    # Pass mu if the scheduler expects it (check signature or just pass as kwarg if supported)
-    try:
-        scheduler.set_timesteps(args.steps, mu=mu)
-    except TypeError:
-        # Fallback if scheduler version doesn't accept mu but has dynamic shifting set (unlikely mismatch)
-        print("Warning: Scheduler does not accept 'mu' argument. Calling without it.")
-        scheduler.set_timesteps(args.steps)
-        
-    print("Starting Sampling...")
-    
-    for t in tqdm(scheduler.timesteps):
-        model_input = latents
-        
-        # Broadcast timestep to batch size and ensure it's a 1D tensor
-        # t is usually a 0-d scalar tensor here.
-        timestep = t.expand(bsz).to(device, dtype)
+            # Pass mu if the scheduler expects it (check signature or just pass as kwarg if supported)
+            try:
+                scheduler.set_timesteps(args.steps, mu=mu)
+            except TypeError:
+                # Fallback if scheduler version doesn't accept mu but has dynamic shifting set (unlikely mismatch)
+                # print("Warning: Scheduler does not accept 'mu' argument. Calling without it.")
+                scheduler.set_timesteps(args.steps)
+                
+            print(f"Sampling for {args.steps} steps...")
+            
+            for t in tqdm(scheduler.timesteps):
+                model_input = latents
+                
+                # Broadcast timestep to batch size and ensure it's a 1D tensor
+                # t is usually a 0-d scalar tensor here.
+                timestep = t.expand(bsz).to(device, dtype)
 
-        # 2. Pack Latents (Concatenate Noise + Control)
-        # Accessing static method from pipeline class
-        packed_latents = QwenImageEditPipeline._pack_latents(
-            model_input, bsz, num_channels_latents, latent_h, latent_w
-        )
-        packed_condition = QwenImageEditPipeline._pack_latents(
-            control_latent, bsz, num_channels_latents, latent_h, latent_w
-        )
-        
-        # Concat along sequence dimension
-        model_input_packed = torch.cat([packed_latents, packed_condition], dim=1)
-        
-        # 3. Prepare other args
-        # RoPE requires the grid size of the packed tokens.
-        # Qwen-VL/Edit uses a patch size of 2x2 on top of VAE latents, so effective grid is (h/2, w/2).
-        img_shapes = [[(1, latent_h // 2, latent_w // 2), (1, latent_h // 2, latent_w // 2)]] * bsz
-        txt_seq_lens = prompt_masks.sum(dim=1).tolist()
-        
-        # 4. Predict
-        noise_pred_packed = transformer(
-            hidden_states=model_input_packed,
-            timestep=timestep / 1000,
-            encoder_hidden_states=prompt_embeds,
-            encoder_hidden_states_mask=prompt_masks,
-            img_shapes=img_shapes,
-            txt_seq_lens=txt_seq_lens,
-            return_dict=False
-        )[0]
-        
-        # 5. Unpack and Slice
-        dataset_token_len = packed_latents.size(1)
-        noise_pred_packed = noise_pred_packed[:, :dataset_token_len]
-        
-        noise_pred = QwenImageEditPipeline._unpack_latents(
-            noise_pred_packed, height=latent_h * vae_scale_factor, width=latent_w * vae_scale_factor, vae_scale_factor=vae_scale_factor
-        )
-        
-        # 6. Scheduler Step
-        latents = scheduler.step(noise_pred, t, latents, return_dict=False)[0]
+                # 2. Pack Latents (Concatenate Noise + Control)
+                # Accessing static method from pipeline class
+                packed_latents = QwenImageEditPipeline._pack_latents(
+                    model_input, bsz, num_channels_latents, latent_h, latent_w
+                )
+                packed_condition = QwenImageEditPipeline._pack_latents(
+                    control_latent.clone(), bsz, num_channels_latents, latent_h, latent_w
+                )
+                
+                # Concat along sequence dimension
+                model_input_packed = torch.cat([packed_latents, packed_condition], dim=1)
+                
+                # 3. Prepare other args
+                # RoPE requires the grid size of the packed tokens.
+                # Qwen-VL/Edit uses a patch size of 2x2 on top of VAE latents, so effective grid is (h/2, w/2).
+                img_shapes = [[(1, latent_h // 2, latent_w // 2), (1, latent_h // 2, latent_w // 2)]] * bsz
+                txt_seq_lens = prompt_masks.sum(dim=1).tolist()
+                
+                # 4. Predict
+                noise_pred_packed = transformer(
+                    hidden_states=model_input_packed,
+                    timestep=timestep / 1000,
+                    encoder_hidden_states=prompt_embeds,
+                    encoder_hidden_states_mask=prompt_masks,
+                    img_shapes=img_shapes,
+                    txt_seq_lens=txt_seq_lens,
+                    return_dict=False
+                )[0]
+                
+                # 5. Unpack and Slice
+                dataset_token_len = packed_latents.size(1)
+                noise_pred_packed = noise_pred_packed[:, :dataset_token_len]
+                
+                noise_pred = QwenImageEditPipeline._unpack_latents(
+                    noise_pred_packed, height=latent_h * vae_scale_factor, width=latent_w * vae_scale_factor, vae_scale_factor=vae_scale_factor
+                )
+                
+                # 6. Scheduler Step
+                latents = scheduler.step(noise_pred, t, latents, return_dict=False)[0]
 
-    # 8. Decode
-    print("Decoding result...")
-    # Denormalize
-    latents = (latents * latents_std) + latents_mean
-    
-    # VAE Decode
-    # vae.decode expects [B, C, T, H, W]
-    decoded = vae.decode(latents).sample
-    
-    # Process to Image
-    # [1, C, T, H, W] -> [1, C, H, W]
-    decoded = decoded.squeeze(2)
-    decoded = (decoded / 2 + 0.5).clamp(0, 1)
-    decoded = decoded.cpu().permute(0, 2, 3, 1).float().numpy()
-    
-    img = Image.fromarray((decoded[0] * 255).astype(np.uint8))
-    img.save(args.output)
-    print(f"Saved fused generation to {args.output}")
+            # 8. Decode
+            print("Decoding result...")
+            # Denormalize
+            latents = (latents * latents_std) + latents_mean
+            
+            # VAE Decode
+            # vae.decode expects [B, C, T, H, W]
+            decoded = vae.decode(latents).sample
+            
+            # Process to Image
+            # [1, C, T, H, W] -> [1, C, H, W]
+            decoded = decoded.squeeze(2)
+            decoded = (decoded / 2 + 0.5).clamp(0, 1)
+            decoded = decoded.cpu().permute(0, 2, 3, 1).float().numpy()
+            
+            img = Image.fromarray((decoded[0] * 255).astype(np.uint8))
+            
+            # Save logic
+            if args.output == "output.png":
+                out_path = f"output_{gen_count}.png"
+            else:
+                 base, ext = os.path.splitext(args.output)
+                 out_path = f"{base}_{gen_count}{ext}"
+
+            img.save(out_path)
+            print(f"Saved fused generation to {out_path}")
+            
+            gen_count += 1
+
+        except (KeyboardInterrupt, EOFError):
+            print("\nExiting interactive session.")
+            break
+
 
 if __name__ == "__main__":
     main()
